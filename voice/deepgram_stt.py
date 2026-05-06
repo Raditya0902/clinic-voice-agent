@@ -24,7 +24,7 @@ async def run_deepgram_finals(audio_queue: asyncio.Queue, finals_queue: asyncio.
             return
         sentence = ch.alternatives[0].transcript.strip()
         if sentence:
-            print(f"Deepgram (final): '{sentence}'")
+            print("Deepgram (final): [transcript received]")
             await finals_queue.put(sentence)
 
     def on_error(error: object) -> None:

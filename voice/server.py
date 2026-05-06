@@ -1,4 +1,6 @@
 import os
+from html import escape
+from urllib.parse import parse_qs
 
 from dotenv import load_dotenv
 
@@ -29,13 +31,17 @@ async def incoming_call(request: Request):
             media_type="application/xml",
             status_code=500,
         )
+    form = parse_qs((await request.body()).decode("utf-8"))
+    caller_phone = (form.get("From") or ["unknown"])[0] or "unknown"
     stream_url = f"wss://{host}/voice-stream"
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         "<Response>\n"
         "    <Say>Welcome to Sunrise Health Clinic. How can I help you today?</Say>\n"
         "    <Connect>\n"
-        f'        <Stream url="{stream_url}" />\n'
+        f'        <Stream url="{stream_url}">\n'
+        f'            <Parameter name="caller_phone" value="{escape(caller_phone)}" />\n'
+        "        </Stream>\n"
         "    </Connect>\n"
         "</Response>"
     )

@@ -36,8 +36,8 @@ pytest tests/ -v
 
 ## Key Conventions
 - All async code uses `asyncio` patterns (no threading)
-- Audio format: Twilio sends/receives mulaw 8kHz. ElevenLabs outputs MP3. Always convert.
-- LLM calls go through Groq (LLaMA 3.1 70B). Keep responses concise — this is voice, not text.
+- Audio format: Twilio sends/receives mulaw 8kHz. ElevenLabs is configured for direct `ulaw_8000` output; do not add pydub/ffmpeg conversion unless the TTS provider changes.
+- LLM calls go through Groq (currently LLaMA 3.3 70B). Keep responses concise — this is voice, not text.
 - Agent responses must be under 3 sentences. Long responses sound terrible over the phone.
 - PII (names, DOB, phone) must be masked in all logs and dashboard displays.
 - Slot locking uses optimistic locking with 60-second timeout.
@@ -45,9 +45,17 @@ pytest tests/ -v
 
 ## Task Workflow
 - Always check `dev/active/` for existing task files before starting work
+- For this project, read `dev/active/voice-agent/codex-handoff.md`, `voice-agent-tasks.md`, and `voice-agent-context.md` before continuing work.
 - For any task taking more than 30 minutes, create dev docs (see dev/active/)
 - Plan before implementing. No jumping straight into code.
 - After making code changes, run `pytest` and fix errors before considering done.
+- After each substantial session, update `dev/active/voice-agent/codex-handoff.md` and add a progress note to `voice-agent-tasks.md`.
+- Never store secrets or raw PII in dev docs.
+
+## Remaining Live Validation
+- Manual Twilio/ngrok validation is still required after code changes: booking, reschedule, cancel, FAQ, and escalation.
+- During live validation, verify Streamlit dashboard transcript/summary masking and call metrics.
+- Record the demo video only after the five live scenarios and dashboard masking are clean.
 
 ## Environment
 - Python 3.11+

@@ -1,7 +1,7 @@
 # Voice Agent — Tasks
 
-**Last Updated:** 2026-05-03
-**Current Phase:** Phase 8 — Polish (complete, pending live demo video)
+**Last Updated:** 2026-05-06
+**Current Phase:** Complete - final live demo validated and repo cleanup finished
 
 ---
 
@@ -94,7 +94,7 @@
 - [x] Implement fallback policies (verification failure → escalate after 2 attempts; slot taken → present remaining; no slots → ask new date)
 - [x] Implement structured call summary generation (auto in escalation_agent)
 - [x] Store call history in call_history table
-- [ ] Optional: Slack webhook notification on escalation — skipped
+- [x] Optional: Slack webhook notification on escalation — implemented by Codex with masked summaries
 - [x] Test: act frustrated → agent escalates. Ask random question → handled gracefully
 - **Milestone:** System handles edge cases without crashing ✓
 
@@ -107,21 +107,509 @@
 - [x] Escalation queue tab with call summaries
 - [x] Auto-refresh every 2 seconds
 - [x] PII masking in all displayed data
-- [ ] Test: make 5 calls, verify dashboard shows everything correctly — requires live Twilio calls
+- [x] Test: make 5 calls, verify dashboard shows everything correctly — final live validation complete
 - **Milestone:** Dashboard is fully functional and visually clear ✓
 
 ## Phase 8: Polish
-- [x] End-to-end test: 5 different call scenarios (book, reschedule, cancel, FAQ, escalate) — verified live; booking scenario confirmed working
+- [x] End-to-end test: 5 different call scenarios (book, reschedule, cancel, FAQ, escalate) — final live validation complete
 - [x] Measure and log latency per pipeline stage
 - [x] Optimize any stage over 1 second — model updated, barge-in enabled, TTS speed tuned
-- [x] Write README.md with architecture diagram, setup instructions, demo guide
-- [ ] Record demo video (split screen: phone call + Streamlit dashboard) — requires live setup
+- [x] Write README.md with architecture diagram, setup instructions, demo guide — final portfolio README complete
+- [x] Record/demo readiness pass (phone call + Streamlit dashboard) — final live scenarios validated
 - [x] Review interview talking points (plan Section 21) — surfaced in README.md Key Design Decisions section
 - **Milestone:** Project is demo-ready and portfolio-ready
 
 ---
 
 ## Progress Notes
+
+> Current status is the final completion snapshot above. Older "remaining" or
+> "pending" notes below are historical and were superseded by later validation.
+
+### 2026-05-06 - Final README and archive cleanup
+
+Completed the final documentation and conservative cleanup pass.
+
+**Changes:**
+- Rewrote `README.md` as the final architecture, setup, demo, safety, and validation overview.
+- Archived legacy Day 4 prototype scripts under `dev/archive/legacy-day4-pipeline/`.
+- Added an archive README explaining that the modular `voice/` server supersedes those scripts.
+- Updated active dev docs to mark the project complete and demo validated.
+
+**Final status:**
+- Live validation is complete for booking, reschedule, cancellation confirmation, FAQ, escalation, dashboard masking/status display, and barge-in.
+- Automated status remains `pytest tests/ -v` -> 128 passed, 2 deprecation warnings.
+- No live Twilio rerun is needed for this cleanup pass.
+
+### 2026-05-06 - Inline date/time slot reservation
+
+Improved booking and reschedule date collection so callers can combine date and
+time in one response.
+
+**Fixes:**
+- When a date-stage utterance includes a clear offered time, such as
+  "tomorrow at 9 AM", booking now locks that matching slot immediately and asks
+  for the visit reason.
+- Doctor-stage utterances that include date and time, such as
+  "Dr. Chen tomorrow at 9 AM", use the same fast path.
+- Reschedule inherits the same behavior for replacement appointments while still
+  keeping the old appointment until the new booking is confirmed.
+- If the requested time is unavailable or ambiguous, the agent still reads the
+  available choices instead of guessing.
+
+**Tests:**
+- `pytest tests/test_agents.py -q` -> 112 passed, 2 deprecation warnings.
+- `pytest tests/ -v` -> 128 passed, 2 deprecation warnings.
+
+### 2026-05-06 - Appointment workflow state reset
+
+Fixed stale appointment workflow state leaking across long same-call demos.
+
+**Fixes:**
+- Added explicit active appointment workflow state plus latest-confirmed
+  appointment memory on `CallState`.
+- Fresh booking/reschedule/cancel intents now clear stale slot-filling and
+  pending existing-appointment fields outside active prompts.
+- Unconfirmed locked slots are released when switching workflows.
+- Booking records the latest confirmed appointment; same-call reschedule/cancel
+  target that latest appointment before falling back to earliest upcoming DB
+  lookup.
+- Reschedule keeps the old appointment until the replacement booking succeeds,
+  then clears pending old-appointment state and updates latest-confirmed details.
+- Cancellation "no" clears only pending cancellation state; cancellation "yes"
+  clears matching latest-confirmed state after the DB cancellation succeeds.
+
+**Tests:**
+- `pytest tests/test_agents.py -q` -> 109 passed, 2 deprecation warnings.
+- `pytest tests/ -v` -> 125 passed, 2 deprecation warnings.
+
+### 2026-05-06 - Final live validation and TTS quota note
+
+Reviewed the latest live combo call after the booking selection reliability patch.
+
+**Confirmed working:**
+- Booking recognized Dr. Emily Johnson cleanly and selected the 12:00 PM slot.
+- FAQ follow-ups for insurance, Sunday hours, location, and an unavailable detail
+  answered correctly and stayed concise.
+- Reschedule reached the expected workflow and confirmed the replacement appointment.
+- Caller phone stayed masked, appointment dates stayed visible, and barge-in fired.
+
+**Only issue:**
+- ElevenLabs returned `quota_exceeded` near the end of the call. This is an
+  operational account-credit limit, not an app failure.
+
+**Remaining before recording:**
+- Restore enough ElevenLabs credits, shorten the recorded script, or switch to a
+  configured TTS fallback before recording the demo.
+
+### 2026-05-06 - Booking selection reliability follow-up
+
+Live booking still showed one repeated doctor prompt and occasional time/date
+sensitivity, so the deterministic selection layer was broadened.
+
+**Fixes:**
+- If the booking LLM returns a partial doctor name such as `Dr. Smith`, booking now
+  resolves it through deterministic matching against the current doctor list before
+  falling back to DB substring lookup.
+- Doctor selection now accepts explicit option phrases such as `the first one` and
+  `number two`.
+- Slot selection now accepts option phrases such as `first`, `second`, `number two`,
+  `last`, `earliest`, and `latest`.
+- Slot selection now maps `noon` and `midday` to a 12:00 PM offered slot.
+- Bare cardinal words like `one` are not treated as option indexes unless the caller
+  says `number one`, `option one`, or `choice one`, avoiding ambiguity with times.
+
+**Tests:**
+- `pytest tests/test_agents.py -q` -> 103 passed, 2 deprecation warnings.
+- `pytest tests/ -v` -> 119 passed, 2 deprecation warnings.
+
+### 2026-05-06 - Deterministic doctor-name matching
+
+Implemented deterministic doctor-name matching before the booking doctor LLM.
+
+**Fixes:**
+- Booking now matches common doctor responses directly, including full name,
+  first+last, unique last name, and unique first name. Demo examples covered:
+  `Dr Patel`, `Raj Patel`, `Patel`, `Raj`, `Doctor Chen`, and `Emily`.
+- Ambiguous shared first or last names do not guess; they fall back to the existing
+  LLM extractor.
+- The deterministic path sets `requested_doctor` and `requested_doctor_id` directly,
+  avoiding an extra repeated doctor prompt for clear demo doctor names.
+
+**Tests:**
+- `pytest tests/test_agents.py -q` -> 92 passed, 2 deprecation warnings.
+- `pytest tests/ -v` -> 108 passed, 2 deprecation warnings.
+
+**Demo status:**
+- Streamlit FAQ status was confirmed as `FAQ Answered`.
+- Remaining step is demo recording.
+
+### 2026-05-06 - Live validation after demo polish
+
+Reviewed the latest sanitized live logs after the FAQ/dashboard/routing polish.
+
+**Confirmed working:**
+- Booking completed with verification, doctor selection, date selection, slot lock,
+  visit reason, confirmation, and farewell.
+- FAQ calls stayed concise for insurance, Saturday hours, unavailable details, and
+  location/directions. The unavailable detail used the front-desk fallback.
+- Reschedule kept the old appointment until the replacement was booked, then cancelled
+  the previous appointment.
+- Cancellation required confirmation before cancelling.
+- Escalation reached the front-desk handoff response.
+- Caller phone remained masked as `[PHONE]`, appointment dates stayed visible, and
+  barge-in fired during live calls.
+
+**Remaining before recording:**
+- Streamlit FAQ status was later confirmed as `FAQ Answered`.
+- Deterministic doctor-name matching was later implemented to remove the repeated
+  doctor-prompt risk.
+
+### 2026-05-06 - Demo polish implementation
+
+Implemented the final demo-polish fixes from the plan.
+
+**Fixes:**
+- FAQ-only answers now set `call_outcome="faq_answered"` when no prior appointment
+  or escalation outcome exists.
+- Streamlit status mapping now labels `faq_answered` as `FAQ Answered`; `completed`
+  remains a neutral farewell-only outcome label.
+- Verified booking/reschedule doctor-selection turns now stay in the active
+  appointment workflow before `requested_doctor` is populated, without calling
+  the intent LLM.
+- FAQ answers are now prompted as 1-2 short phone-friendly sentences; unavailable
+  answers use only the front-desk fallback sentence.
+
+**Tests:**
+- `pytest tests/test_agents.py -q` -> 82 passed, 2 deprecation warnings.
+- `pytest tests/ -v` -> 98 passed, 2 deprecation warnings.
+
+**Still open:**
+- Manual Twilio/ngrok validation for one short FAQ call, one booking doctor-selection
+  call, and final dashboard masking/status review before recording the demo video.
+
+### 2026-05-06 - Demo polish plan
+
+Polishing the final live-demo concerns with scoped fixes.
+
+**Planned fixes:**
+- Treat FAQ-only calls as a first-class `faq_answered` outcome so Streamlit live
+  feed and charts do not render them as `Unknown`.
+- Tighten verified appointment-workflow routing so answers to the doctor-selection
+  prompt stay in booking or reschedule before `requested_doctor` is populated.
+- Constrain FAQ responses to 1-2 short phone-friendly sentences and keep the
+  unavailable-answer fallback to the front-desk handoff sentence only.
+
+**Validation planned:**
+- Add focused unit coverage for FAQ outcomes, dashboard status mapping, active
+  doctor-selection routing, and concise markdown FAQ behavior.
+- Run `pytest tests/test_agents.py -q` and `pytest tests/ -v`.
+
+### 2026-05-06 - FAQ demo cleanup and deterministic slot parsing
+
+Implemented the remaining code cleanup from the caveats plan.
+
+**Fixes:**
+- Added `FAQ_RETRIEVAL_MODE=markdown|chroma`, defaulting to `markdown`.
+  In markdown mode, FAQ calls skip Chroma entirely and answer from the clinic
+  markdown knowledge files, avoiding the noisy live `FAQ RAG error` path.
+- Kept Chroma retrieval available with `FAQ_RETRIEVAL_MODE=chroma`; Chroma
+  exceptions still fall back to markdown context.
+- Added deterministic offered-slot parsing before the booking LLM extractor.
+  It maps common forms like `10`, `10 AM`, `ten`, `ten AM`, `ten o'clock`,
+  and `the 10 o'clock one` to the matching displayed slot, while rejecting
+  times not in the offered list.
+- Documented `FAQ_RETRIEVAL_MODE` in `.env.example` and README.
+
+**Tests:**
+- `pytest tests/test_agents.py -q` -> 73 passed, 2 deprecation warnings.
+- `pytest tests/ -v` -> 89 passed, 2 deprecation warnings.
+
+**Still open:**
+- Manual Twilio/ngrok validation for the five live scenarios and Streamlit dashboard masking.
+- Demo video recording after the live pass is clean.
+
+### 2026-05-05 - Latest live validation
+
+Reviewed the latest sanitized live logs after the active workflow routing fix.
+
+**Confirmed working:**
+- Caller phone now appears in logs as masked `from=[PHONE]`, not `from=unknown`.
+- Booking flow completed with verification, doctor selection, date selection, slot lock,
+  visit reason, and confirmation.
+- Appointment dates remain visible in masked agent logs, e.g. booking and reschedule
+  confirmations show appointment dates instead of `[DOB]`.
+- Reschedule now completes correctly: the final response states that the previous
+  appointment was cancelled and the new appointment was confirmed.
+- Barge-in continues to work and cancels outbound TTS during interruptions.
+- Cancellation confirmation and escalation were validated in the previous live pass.
+
+**Remaining caveats:**
+- Slot selection occasionally required repeated attempts before the time was recognized.
+  The workflow stayed in the correct booking/reschedule state; this is now an STT/time
+  parsing sensitivity issue rather than a routing bug. For demo, say times clearly like
+  "10 AM" or "ten o'clock AM".
+- FAQ still logs ChromaDB `FAQ RAG error` and uses markdown fallback context. Calls
+  continue safely, but the log noise should be cleaned up before a polished demo if time
+  allows.
+- Dashboard live-call display and demo recording remain manual final steps.
+
+**Tests:**
+- No code changes in this note. Last full run: `pytest tests/ -v` -> 80 passed, 2 deprecation warnings.
+
+### 2026-05-05 - Active workflow routing fix
+
+A later live pass showed all major flows were mostly working, but revealed a real
+reschedule correctness issue. During the reschedule slot-selection turn, the LLM intent
+classifier flipped from `reschedule` to `booking`. That booked the new appointment but
+skipped `reschedule_agent`, so the old appointment was not cancelled. A later cancellation
+call found both appointments, confirming the reschedule had become an add-on booking.
+
+The booking flow showed a related symptom: while choosing a time, one slot-selection
+utterance was classified as `reschedule`, producing a brief "no upcoming appointments"
+response before recovering.
+
+**Fixes:**
+- `intent_agent` now detects active transactional prompts such as "which time works",
+  "available times", "what date", "which doctor", and "reason for your visit".
+- If a booking is in progress, responses to those prompts route to `booking` without
+  asking the LLM classifier.
+- If a reschedule is in progress, responses to those prompts route to `reschedule`
+  without asking the LLM classifier, allowing `reschedule_agent` to cancel the old
+  appointment after the new booking is confirmed.
+- Added regression tests for active booking and active reschedule slot prompts being
+  kept in the correct workflow.
+
+**Tests:**
+- `pytest tests/ -v` -> 80 passed, 2 deprecation warnings.
+
+**Live validation next:**
+- Restart uvicorn and retry reschedule. The final response should explicitly say the
+  previous appointment was cancelled and the new appointment is confirmed.
+
+### 2026-05-05 - Live validation follow-up
+
+Reviewed sanitized live logs for cancellation, booking, cancellation-confirmation, and
+escalation calls.
+
+**Live results:**
+- Barge-in is now working during FAQ and booking prompts. Logs show
+  `[barge-in] caller speech detected; cancelling TTS`, followed by the next user turn
+  being processed.
+- Booking successfully verified the caller, collected doctor/date/time/reason, locked a
+  slot, and confirmed the appointment.
+- Cancellation confirmation now follows the safer flow: identify the appointment, ask
+  whether to cancel it, then cancel after an affirmative response.
+- Escalation routes to the front desk handoff response.
+- A cancellation attempt with no matching verified record or no upcoming appointments
+  returns the expected fallback instead of making a destructive change.
+
+**Issues found and fixed:**
+- An `unknown` intent at confidence `0.5` reused the previous agent response because the
+  fallback only handled confidence below `0.5`. `intent_agent` now sets a fresh unknown
+  fallback for any `unknown` intent and routes "no" after "anything else?" to farewell.
+- Appointment dates in agent logs/dashboard were masked as `[DOB]` because the PII masker
+  treated every ISO date as a DOB. `mask_pii()` now masks dates only when they appear in
+  DOB/birthday contexts, preserving appointment dates such as booking confirmations.
+- Live call starts still logged `from=unknown`. `/incoming-call` now passes Twilio's
+  caller number into the Media Stream as a custom parameter, and the stream handler reads
+  it from the `start` event.
+
+**Tests:**
+- `pytest tests/ -v` -> 78 passed, 2 deprecation warnings.
+
+**Still open:**
+- Restart uvicorn and verify the next live call logs `from=[PHONE]` instead of
+  `from=unknown`.
+- ChromaDB still logs `FAQ RAG error` during live FAQ. Calls continue using markdown
+  fallback context, but the persistent-client error should be cleaned up before the final
+  demo if time allows.
+- Dashboard live-call display and demo recording still need final manual validation.
+
+### 2026-05-05 - Cancellation confirmation fix
+
+Live cancellation testing showed the cancellation agent was too destructive: after
+verification, every `cancel` intent immediately cancelled the earliest upcoming
+appointment. In one call, that allowed two separate appointments to be cancelled.
+
+**Fixes:**
+- `agents/cancellation_agent.py` now identifies the earliest upcoming appointment and
+  asks for confirmation before calling `cancel_appointment()`.
+- A pending cancellation accepts clear yes/no responses; negative responses leave the
+  appointment unchanged and clear the pending cancellation state.
+- `agents/intent_agent.py` routes pending cancellation yes/no confirmations without an
+  LLM call so short answers like "yes" do not fall through as unknown.
+- `agents/reschedule_agent.py` ignores appointment state left over from a completed
+  cancellation, preventing a later reschedule intent from incorrectly entering booking.
+- Added regression tests for confirm-before-cancel, negative confirmation, pending
+  confirmation intent routing, and cancelled-state reschedule handling.
+
+**Tests:**
+- `pytest tests/ -v` -> 75 passed, 2 deprecation warnings.
+
+**Live validation next:**
+- Restart uvicorn before retrying cancellation.
+- Expected flow: ask to cancel, verify identity, agent says it found one appointment and
+  asks if it should cancel it, caller says yes, then exactly that appointment is cancelled.
+
+### 2026-05-05 - Twilio buffer-aware barge-in fix
+
+Live FAQ testing showed the local TTS task could finish before the caller interrupted,
+while Twilio continued playing already-buffered audio. That made the agent appear to
+finish its whole answer before listening.
+
+**Fixes:**
+- `voice/session.py` now keeps playback active until Twilio returns the matching TTS
+  `mark` event instead of clearing `speaking` when local frame sending finishes.
+- `voice/audio_utils.py` now supports Twilio `mark` and `clear` messages.
+- `voice/twilio_handler.py` handles incoming `mark` events and sends `clear` when
+  barge-in speech is detected or a finalized new user turn starts.
+- Barge-in detection no longer requires the local `speak_task` to still be running,
+  because Twilio may still be playing buffered audio after that task completes.
+- Added regression tests for Twilio mark-based playback tracking and clear-on-cancel.
+
+**Tests:**
+- `pytest tests/ -v` -> 71 passed, 2 deprecation warnings.
+
+**Live validation next:**
+- Restart uvicorn, call again with `BARGE_IN=1`, and confirm startup logs include
+  `[barge-in] enabled rms_threshold=... speech_frames=... silence_frames=...`.
+- Interrupt during TTS and confirm `[barge-in] caller speech detected; cancelling TTS`
+  appears and the spoken audio stops promptly.
+
+### 2026-05-05 - Barge-in VAD fix
+
+Live testing confirmed TTS audio was audible, but the agent did not stop speaking when the
+caller interrupted. The previous no-audio fix had disabled raw-media cancellation entirely.
+
+**Fixes:**
+- Added `voice/barge_in.py`, a lightweight G.711 mulaw RMS detector.
+- With `BARGE_IN=1`, `voice/twilio_handler.py` now cancels TTS only after sustained inbound
+  speech frames, not on silence/noise.
+- Added tunables in `.env.example`: `BARGE_IN_RMS_THRESHOLD`, `BARGE_IN_SPEECH_FRAMES`,
+  and `BARGE_IN_SILENCE_FRAMES`.
+- Added tests for silence rejection and sustained speech detection.
+
+**Tests:**
+- `pytest tests/ -v` -> 69 passed, 2 deprecation warnings.
+
+**Live validation next:**
+- Restart uvicorn and interrupt the agent with a clear sentence while it is speaking.
+- Confirm the server logs `[barge-in] caller speech detected; cancelling TTS`.
+- If it does not trigger, lower `BARGE_IN_RMS_THRESHOLD` from `900` to `700` and retry.
+
+---
+
+### 2026-05-05 - Live FAQ crash hardening
+
+Live FAQ testing triggered a ChromaDB Rust/PyO3 panic:
+`range start index 10 out of range for slice of length 9`. The panic propagated through
+LangGraph and killed the Twilio WebSocket because it was not a normal `Exception`.
+
+**Fixes:**
+- `faq_agent` catches non-system `BaseException` from RAG retrieval and logs
+  `FAQ RAG error: ...` instead of crashing.
+- FAQ now falls back to direct markdown knowledge-base context if ChromaDB retrieval fails.
+- `CallSession.process_turn()` catches non-system `BaseException` from LangGraph/native
+  dependencies and returns a technical fallback instead of taking down the WebSocket.
+- Added regression tests for FAQ RAG native-panic handling and session-level native-panic
+  handling.
+
+**Tests:**
+- `pytest tests/ -v` -> 68 passed, 2 deprecation warnings.
+
+**Live validation next:**
+- Restart uvicorn and retry FAQ. If ChromaDB still logs a RAG error, the call should continue
+  and answer using markdown fallback context.
+
+---
+
+### 2026-05-05 - Live TTS/dashboard fix
+
+First live booking call after replacing the Groq key reached LangGraph and booked an
+appointment, but the caller could not hear the agent. Server logs had no
+`[latency] tts_first_frame=...`, which pointed to TTS being cancelled before the first
+audio frame.
+
+**Fixes:**
+- `BARGE_IN=1` no longer cancels TTS on every raw Twilio media packet; raw media includes
+  silence/noise and was muting the agent immediately.
+- With barge-in enabled, TTS runs in the background and is only cancelled when a finalized
+  new utterance is processed.
+- `voice/session.py` now logs when TTS is skipped for a missing stream SID, cancelled, or
+  completes without sending frames.
+- Start-event handling now falls back to top-level `streamSid` if Twilio does not include
+  it inside the `start` object.
+- Dashboard transcript cards now set explicit dark text so light cards remain readable in
+  Streamlit dark mode.
+
+**Tests:**
+- `pytest tests/ -v` -> 66 passed, 2 deprecation warnings.
+
+**Live validation next:**
+- Restart uvicorn and retry one call. Confirm the server logs `[latency] tts_first_frame=...`
+  after each agent response and the caller hears audio.
+
+---
+
+### 2026-05-05 - Codex finishing pass
+
+Codex implemented the remaining non-live finishing items from the handoff plan.
+Root `AGENTS.md` was not changed.
+
+**Behavior changes:**
+- Terminal logs no longer print raw user transcripts; caller phone and agent text are masked.
+- `mask_pii()` now handles country-code phone numbers, known patient names, and common name-introduction phrases.
+- Call history transcripts and summaries are stored with verified patient names masked.
+- Abandoned locked slots are released on WebSocket cleanup when no booking was confirmed.
+- Reschedule keeps the old appointment until the replacement booking succeeds, then cancels the old appointment.
+- Scope detection now produces a bounded response for substantive off-topic unknowns and recovers on later in-scope turns.
+- Optional Slack escalation notifications send masked summaries when `SLACK_WEBHOOK_URL` is configured.
+- README, `.env.example`, and requirements were aligned with current runtime dependencies and Groq model.
+
+**Tests:**
+- `pytest tests/ -v` -> 66 passed, 2 deprecation warnings.
+
+**Still requires live/manual work:**
+- Make 5 live Twilio calls and verify dashboard data/masking.
+- Record the split-screen demo video.
+- Remove or archive legacy root demo scripts after the modular server is confirmed live.
+
+---
+
+### 2026-05-05 - Codex inspection + handoff logging
+
+Codex inspected the repo without modifying application code, then added persistent handoff
+logging under `dev/active/voice-agent/`. Root `AGENTS.md` remains unchanged and is still the
+project instruction source.
+
+**Files created:**
+```
+dev/active/voice-agent/codex-handoff.md - resume notes, risks, next tasks, run commands
+```
+
+**Files modified:**
+```
+dev/active/voice-agent/voice-agent-tasks.md   - this progress note
+dev/active/voice-agent/voice-agent-context.md - pointer to the Codex handoff file
+```
+
+**Inspection result:**
+- `pytest tests/ -v` -> 60 passed, 2 deprecation warnings.
+- No package scripts/build config found beyond `requirements.txt`.
+- Explicit unfinished work remains: optional Slack escalation, dashboard live-call validation,
+  and demo video recording.
+
+**Risks found at inspection time, later addressed in Codex finishing pass unless marked manual:**
+1. PII is printed in terminal logs (`voice/twilio_handler.py`).
+2. Name masking is not implemented in `guardrails/pii_masker.py`.
+3. `.env.example` and README still reference the old Groq 3.1 model.
+4. Locked slots are not released on call cleanup even though `release_slot()` exists.
+5. Reschedule cancels the old appointment before replacement booking is confirmed.
+6. Scope detector is implemented/tested but not wired into live routing.
+7. `dashboard/app.py` imports pandas, but `requirements.txt` does not list it directly.
+
+---
 
 ### 2026-05-03 — Phase 8 complete (live testing + bug fixes, round 2)
 

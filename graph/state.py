@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 from typing_extensions import TypedDict
 
 
@@ -39,6 +39,7 @@ class CallState(TypedDict):
     verification_attempts: int
 
     # Booking slot-filling
+    active_appointment_workflow: Optional[Literal["booking", "reschedule", "cancel"]]
     requested_doctor: Optional[str]
     requested_doctor_id: Optional[int]
     requested_date: Optional[str]
@@ -47,6 +48,8 @@ class CallState(TypedDict):
     available_slots: list[dict]
     locked_slot_id: Optional[int]
     booked_appointment_id: Optional[int]
+    last_confirmed_appointment_id: Optional[int]
+    last_confirmed_appointment_details: Optional[dict]
 
     # Reschedule / cancel
     existing_appointment_id: Optional[int]
@@ -89,6 +92,7 @@ def initial_call_state(
         patient_id=None,
         patient_name=None,
         verification_attempts=0,
+        active_appointment_workflow=None,
         requested_doctor=None,
         requested_doctor_id=None,
         requested_date=None,
@@ -97,6 +101,8 @@ def initial_call_state(
         available_slots=[],
         locked_slot_id=None,
         booked_appointment_id=None,
+        last_confirmed_appointment_id=None,
+        last_confirmed_appointment_details=None,
         existing_appointment_id=None,
         existing_appointment_details=None,
         faq_query=None,

@@ -1,4 +1,5 @@
 """Sunrise Health Clinic — Voice Agent Ops Dashboard."""
+import html
 import sys
 import time
 from collections import Counter
@@ -11,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pandas as pd
 import streamlit as st
 
+from dashboard.status import format_status, label_for_outcome
 from db.call_history import get_dashboard_stats, get_recent_calls
 from guardrails.pii_masker import mask_pii
 
@@ -23,21 +25,6 @@ st.set_page_config(
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-_OUTCOME_COLORS = {
-    "booked": "🟢",
-    "cancelled": "🔵",
-    "escalated": "🔴",
-    None: "⚪",
-}
-
-_STATUS_LABEL = {
-    "booked": "Booked",
-    "cancelled": "Cancelled",
-    "escalated": "Escalated",
-    None: "Incomplete",
-}
-
 
 def _fmt_duration(secs: int | None) -> str:
     if secs is None:
@@ -68,17 +55,17 @@ def _render_transcript(turns: list[dict]) -> None:
         return
     for turn in turns:
         role = turn.get("role", "")
-        text = mask_pii(turn.get("text", ""))
+        text = html.escape(mask_pii(turn.get("text", "")))
         if role == "patient":
             st.markdown(
                 f'<div style="background:#f0f4ff;padding:6px 12px;border-radius:8px;'
-                f'margin:4px 0"><b>👤 Patient:</b> {text}</div>',
+                f'margin:4px 0;color:#111827"><b>👤 Patient:</b> {text}</div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
                 f'<div style="background:#f0fff4;padding:6px 12px;border-radius:8px;'
-                f'margin:4px 0"><b>🤖 Agent:</b> {text}</div>',
+                f'margin:4px 0;color:#111827"><b>🤖 Agent:</b> {text}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -117,10 +104,7 @@ with tab_feed:
         # Summary table
         rows = []
         for c in calls:
-            status = "🔴 Active" if not c["end_time"] else (
-                _OUTCOME_COLORS.get(c["outcome"], "⚪") + " " +
-                _STATUS_LABEL.get(c["outcome"], "Unknown")
-            )
+            status = format_status(c["outcome"], active=not c["end_time"])
             rows.append({
                 "SID": c["call_sid"][-8:] if c["call_sid"] else "—",
                 "Phone": _fmt_phone(c["caller_phone"]),
@@ -136,7 +120,7 @@ with tab_feed:
         st.subheader("Transcript Viewer")
         options = [
             f"{c['call_sid'][-8:]} — {_fmt_time(c['start_time'])} — "
-            f"{_STATUS_LABEL.get(c['outcome'], 'Active')}"
+            f"{label_for_outcome(c['outcome'], 'Active')}"
             for c in calls
         ]
         selected_idx = st.selectbox("Select a call", range(len(options)), format_func=lambda i: options[i])
@@ -145,7 +129,7 @@ with tab_feed:
         col_a, col_b = st.columns(2)
         col_a.caption(f"**Phone:** {_fmt_phone(selected['caller_phone'])}")
         col_a.caption(f"**Duration:** {_fmt_duration(selected['duration_seconds'])}")
-        col_b.caption(f"**Outcome:** {_STATUS_LABEL.get(selected['outcome'], 'Active')}")
+        col_b.caption(f"**Outcome:** {label_for_outcome(selected['outcome'], 'Active')}")
         col_b.caption(f"**Escalated:** {'Yes' if selected['escalated'] else 'No'}")
 
         if selected.get("call_summary"):
@@ -183,7 +167,7 @@ with tab_metrics:
         with col_right:
             st.subheader("Outcome Distribution")
             outcome_counts: Counter = Counter(
-                _STATUS_LABEL.get(c["outcome"], "Incomplete") for c in calls
+                label_for_outcome(c["outcome"], "Incomplete") for c in calls
             )
             outcome_df = pd.DataFrame(
                 outcome_counts.most_common(),
@@ -228,7 +212,7 @@ with tab_escalations:
         for c in escalated:
             with st.expander(
                 f"⚠️ {_fmt_phone(c['caller_phone'])} — {_fmt_time(c['start_time'])} "
-                f"— {_STATUS_LABEL.get(c['outcome'], 'Unknown')}"
+                f"— {label_for_outcome(c['outcome'])}"
             ):
                 if c.get("call_summary"):
                     st.markdown(f"**Summary:** {mask_pii(c['call_summary'])}")

@@ -116,7 +116,8 @@ def get_dashboard_stats(db_path: str = DB_PATH) -> dict:
 
     successful = conn.execute(
         "SELECT COUNT(*) FROM call_history "
-        "WHERE outcome IN ('booked', 'cancelled') AND end_time IS NOT NULL"
+        "WHERE outcome IN ('booked', 'rescheduled', 'cancelled', 'faq_answered') "
+        "AND end_time IS NOT NULL"
     ).fetchone()[0]
 
     avg_dur = conn.execute(

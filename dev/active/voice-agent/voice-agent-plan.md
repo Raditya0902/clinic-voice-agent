@@ -1362,7 +1362,7 @@ ELEVENLABS_VOICE_ID=ErXwobaYiN019PkySvjV
 
 TWILIO_ACCOUNT_SID=your_twilio_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_PHONE_NUMBER=+17075930902
+TWILIO_PHONE_NUMBER=your_twilio_phone_number
 
 NGROK_URL=your_ngrok_url
 

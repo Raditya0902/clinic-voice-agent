@@ -1,6 +1,15 @@
 # Voice Agent — Context
 
-**Last Updated:** 2026-05-03 (Phase 8 complete)
+**Last Updated:** 2026-05-06 (final README/archive cleanup)
+
+## Final Completion Status
+
+- Project is complete, demo-ready, and portfolio-ready.
+- Final live validation is complete for booking, reschedule, cancellation confirmation, FAQ, escalation, dashboard masking/status display, and barge-in.
+- Latest automated status: `pytest tests/ -v` -> 128 passed, 2 deprecation warnings.
+- The maintained runtime is the modular `voice/` server.
+- Legacy Day 4 root scripts are archived under `dev/archive/legacy-day4-pipeline/` for learning/reference only.
+- No further live Twilio validation is required for the final cleanup pass.
 
 ## Architecture Decisions
 
@@ -8,38 +17,78 @@
 |---|---|---|
 | Voice pipeline | Raw (no Vapi/Livekit) | Maximum control, resume value |
 | STT | Deepgram Nova-2, streaming | Low latency, mulaw support |
-| TTS | ElevenLabs Turbo v2, streaming | Natural voice, free tier |
+| TTS | ElevenLabs Flash v2.5, streaming | Lower latency, natural voice, free tier |
 | TTS Voice ID | ErXwobaYiN019PkySvjV (Antoni) | Works on free tier |
-| LLM | Groq — LLaMA 3.1 70B | Free, fast inference |
+| LLM | Groq — LLaMA 3.3 70B | Free, fast inference |
 | Agent framework | LangGraph | Stateful multi-agent routing |
 | DB | SQLite | Simple, no external dependency |
-| RAG | ChromaDB + all-MiniLM-L6-v2 | Local, fast |
+| FAQ retrieval | Markdown by default; ChromaDB optional | Clean demo logs while preserving vector retrieval mode |
+| Demo FAQ answers | 1-2 short phone-friendly sentences | Live phone audio needs concise answers over exhaustive policy detail |
+| Demo workflow routing | Preserve verified booking/reschedule slot-filling turns | Prevent doctor/date/time answers from being misclassified as FAQ or a new workflow |
+| Same-call appointment targeting | Latest appointment booked in the current call | Keeps long demo calls deterministic when a caller books, asks FAQ, then reschedules or cancels |
+| Inline date/time reservation | Lock a clearly requested offered time during doctor/date collection | Avoids repeating all times when the caller says "tomorrow at 9 AM" and 9 AM is available |
+| Doctor-name extraction | Deterministic match before LLM fallback | Clear demo doctor names should not repeat the doctor prompt |
 | Server | FastAPI + uvicorn | Async WebSocket support |
 | Tunnel | ngrok | Expose localhost to Twilio |
 | Dashboard | Streamlit | Quick to build, auto-refresh |
 
-## Existing Working Code
+## Prototype Lineage
 
-Aditya has a working Day 4 voice pipeline from the learning plan:
+The original Day 4 learning-plan voice pipeline included:
 - FastAPI server with Twilio WebSocket handler
 - Deepgram streaming STT (mulaw, 8kHz, endpointing 300ms)
 - ElevenLabs TTS with Antoni voice — outputs `ulaw_8000` directly (no pydub/ffmpeg needed)
 - Basic LLM response (hardcoded demo responses, replaced by LangGraph in Phase 3)
 
-**This is the foundation.** Phase 1 copies this code and builds on top.
+That prototype has been superseded by the modular `voice/` server. The old scripts are archived under `dev/archive/legacy-day4-pipeline/`.
 
 ## API Keys & Services (already set up)
 
-- Twilio: Account active, phone number +1 707 593 0902
+- Twilio: Account active, phone number configured locally
 - Deepgram: Account active, STT API key working
-- ElevenLabs: Account active (ElevenCreative), TTS API key working
-- Groq: Needs setup (free tier)
+- ElevenLabs: Account active, TTS API key working
+- Groq: Account active, LLaMA 3.3 70B key working
 - ngrok: Account active, tunnel working
 
 ## Key Files to Reference
 
 - `voice-agent-plan.md` — Full architecture, all agent specs, DB schema
 - `voice-agent-tasks.md` — Implementation checklist
+
+## Demo Polish Decisions (2026-05-06)
+
+- FAQ-only calls should set `call_outcome="faq_answered"` once the FAQ agent
+  provides an answer and no appointment or escalation outcome exists. This gives
+  Streamlit a clear live-demo status instead of `Unknown`.
+- When a verified caller is inside booking or reschedule and the last agent prompt
+  asks which doctor they want, the next user turn should stay in the active
+  appointment workflow even if `requested_doctor` is still empty. This is the
+  earliest slot-filling state and should not depend on populated booking fields.
+- FAQ answer generation should prioritize voice brevity. Markdown and Chroma
+  retrieval remain unchanged, but the answer style should be 1-2 short sentences.
+  If the clinic knowledge does not answer the question, use only the front-desk
+  fallback sentence.
+- Booking doctor selection should first use deterministic matching against the
+  `get_all_doctors()` list. Accept full name, first+last, unique last name, and
+  unique first name; if a name is ambiguous, fall back to the existing LLM extractor
+  instead of guessing.
+- If the booking doctor LLM returns a partial name, run that partial name through the
+  same deterministic matcher before DB lookup. This catches returns like `Dr. Smith`
+  when the real stored name is `Dr. Sarah Smith`.
+- For live demo ergonomics, doctor and slot selection accept explicit option phrases
+  such as `first`, `second`, `number two`, and `last`. Time selection also accepts
+  `earliest`, `latest`, `noon`, and `midday`. Bare cardinal words are not option
+  indexes unless paired with `number`, `option`, or `choice`.
+- Same-call reschedule and cancellation target the latest appointment booked
+  during that call by default. The state intentionally preserves
+  `last_confirmed_appointment_*` across FAQ, farewell, and workflow transitions,
+  then updates it after successful reschedule or clears it after confirmed
+  cancellation. Separate calls remain fresh because `initial_call_state()` starts
+  with no latest confirmed appointment.
+- If a booking/reschedule response includes a clear offered time, such as
+  "tomorrow at 9 AM" or "Dr. Chen tomorrow at 9 AM", booking locks that slot
+  immediately and asks for the visit reason. If the time is unavailable or
+  ambiguous, the agent still presents the available choices.
 
 ## Concurrency Note
 
@@ -122,12 +171,11 @@ ElevenLabs 402 errors (voice not on free tier) are caught inside
 `CallSession.speak()`. The handler stays clean and doesn't need to know
 about TTS internals. If 402 fires, it prints guidance and the turn is skipped.
 
-### 10. Original Day 4 files kept in root (not deleted)
+### 10. Original Day 4 files archived
 
 `full_pipeline.py`, `deepgram_feed.py`, `elevenlabs_stream.py`, `input_pipeline.py`
-remain in the project root. They are superseded but kept until the new server
-is verified live over a real Twilio call. Delete them after the Phase 1 milestone
-is confirmed working.
+are preserved under `dev/archive/legacy-day4-pipeline/`. They are superseded by the
+modular `voice/` server and are kept only for learning/reference.
 
 ### 11. Python 3.13 compatibility — datetime.utcnow() replaced
 
@@ -422,11 +470,13 @@ Production would present a list and ask which appointment to cancel/reschedule.
 Phase 5 simplifies: always take `appointments[0]` (earliest by date + start_time).
 Noted here so Phase 8 polish can address if needed.
 
-### 4. cancellation_agent completes in a single turn — no confirmation step
+### 4. cancellation_agent now requires confirmation
 
-The patient already stated their intent ("cancel my appointment"). The agent looks up,
-cancels, and confirms immediately without asking "Are you sure?". This is acceptable for
-a demo where we control the test calls. A production system might add a confirmation step.
+The original Phase 5 simplification was single-turn cancellation. Live validation showed
+that was too destructive, so cancellation now identifies the target appointment and asks
+for confirmation before calling `cancel_appointment()`. Same-call cancellation targets the
+latest appointment booked during the current call before falling back to the earliest
+upcoming DB appointment.
 
 ### 5. db/appointments.py added for appointment lookups
 
@@ -509,3 +559,198 @@ Do not query the doctors table directly from agents — always go through `db/do
 The .venv was created without pytest. Must run `.venv/bin/pip install pytest` before
 running the test suite. The CLAUDE.md command `pytest tests/ -v` should be run as
 `.venv/bin/python -m pytest tests/ -v` or with pytest installed in the venv.
+
+---
+
+## Codex Handoff Logging (2026-05-05)
+
+Codex added `dev/active/voice-agent/codex-handoff.md` as the resume file for future
+sessions. Keep root `AGENTS.md` unchanged; it is the project instruction file, not a
+session log.
+
+Use the files this way:
+- `voice-agent-tasks.md` - durable checklist and progress notes.
+- `voice-agent-context.md` - architecture decisions and implementation rationale.
+- `codex-handoff.md` - latest resume snapshot, inspection findings, and next actions.
+
+Do not write secrets or raw PII into any dev docs.
+
+---
+
+## Codex Finishing Decisions (2026-05-05)
+
+### 1. Logs favor privacy over full transcript debugging
+
+`voice/deepgram_stt.py` and `voice/twilio_handler.py` no longer print raw patient
+transcripts. The handler logs only that a transcript was received; agent responses and
+caller phone values are passed through `mask_pii()`.
+
+### 2. Name masking is best-effort plus known-patient masking
+
+`mask_pii()` now accepts optional known names. Once verification succeeds, call-history
+transcripts and summaries are masked with the verified patient name and its name parts.
+It also masks common phrases like "my name is ..." before storage/display. This avoids
+adding patient-name fields to every call-history row.
+
+### 3. Reschedule is no longer destructive up front
+
+`reschedule_agent` now stores the existing appointment and pre-fills the doctor, but it
+does not cancel the old appointment until the replacement booking has succeeded. If the
+new booking succeeds but old cancellation fails, the call is escalated so the front desk
+can resolve the double-booking risk.
+
+### 4. Scope guardrail is intentionally narrow
+
+`scope_detector` is wired through low-confidence unknown intent handling. It only fires
+for substantive off-topic utterances, not filler like "uh, I don't know"; this prevents
+normal hesitation during voice calls from trapping the user in an out-of-scope state.
+An out-of-scope state is cleared on the next turn so the caller can recover.
+
+### 5. Slack escalation is optional and masked
+
+`escalation_agent` sends a Slack webhook only when `SLACK_WEBHOOK_URL` is set. The payload
+uses the same masked call summary and does not log the webhook URL. Slack failures are
+logged by exception type only and do not break the call flow.
+
+### 6. Validation status
+
+Superseded final status: `pytest tests/ -v` passes with 128 tests and 2 dependency
+deprecation warnings. Final live Twilio/dashboard validation is complete.
+
+### 7. Barge-in must not use raw Twilio media packets
+
+Live testing showed no audible agent voice and no `[latency] tts_first_frame=...` logs.
+The likely cause was `BARGE_IN=1` cancelling speech on every inbound Twilio media packet;
+Twilio sends continuous media, including silence/noise, while the agent is preparing TTS.
+
+`voice/twilio_handler.py` now treats raw media only as Deepgram input. With barge-in enabled,
+TTS runs in the background and can be cancelled when a finalized new utterance is processed,
+not on every raw audio packet. This preserves interruption behavior without muting the agent.
+
+### 8. Dashboard transcript cards need explicit text color
+
+Streamlit dark mode made transcript text white on pale custom HTML cards. The dashboard now
+sets `color:#111827` on patient/agent transcript cards so masked transcripts remain readable.
+
+### 9. Native dependency panics must not kill calls
+
+Live FAQ testing triggered a ChromaDB Rust/PyO3 panic while creating a persistent client.
+This propagated as a non-standard `BaseException`, so normal `except Exception` handlers did
+not catch it and the WebSocket crashed.
+
+`faq_agent` now catches non-system `BaseException` around RAG retrieval and falls back to
+direct markdown context from `rag/clinic_knowledge`. `CallSession.process_turn()` also catches
+non-system `BaseException` around LangGraph invocation so a native library panic returns a
+technical fallback instead of terminating the call. It still re-raises cancellation and
+process-control exceptions.
+
+### 10. Barge-in uses mulaw VAD
+
+Raw Twilio media is continuous, so presence of media is not enough to infer interruption.
+`voice/barge_in.py` decodes inbound G.711 mulaw frames and uses RMS energy over sustained
+frames to detect caller speech. Defaults are conservative:
+- `BARGE_IN_RMS_THRESHOLD=900`
+- `BARGE_IN_SPEECH_FRAMES=4`
+- `BARGE_IN_SILENCE_FRAMES=2`
+
+If live interruption feels insensitive, lower the threshold to `700`. If silence/noise
+cancels speech, raise it to `1100` or increase `BARGE_IN_SPEECH_FRAMES`.
+
+### 11. Barge-in must clear Twilio's playback buffer
+
+ElevenLabs audio can be generated and sent to Twilio faster than the caller hears it.
+That means the local `speak_task` may finish while Twilio is still playing buffered TTS.
+Cancelling the local task alone does not stop audio already queued at Twilio.
+
+Outbound TTS now sends a Twilio `mark` after media frames and keeps `session.speaking`
+true until Twilio returns that mark. On barge-in or a finalized new user turn,
+`session.cancel_speak(..., clear_buffer=True)` sends Twilio `clear` so buffered audio is
+flushed immediately.
+
+### 12. Cancellation is confirm-before-destructive
+
+Live cancellation testing exposed that `cancellation_agent` cancelled the earliest
+appointment immediately after verification. If the caller later said another
+cancel-like utterance, the next appointment could be cancelled in the same call.
+
+Cancellation now has two stages: identify the earliest upcoming appointment and ask for
+confirmation, then cancel only after an affirmative response. Short yes/no responses to
+that confirmation are routed deterministically in `intent_agent` so the LLM classifier
+does not lose the pending workflow. `reschedule_agent` also ignores appointment state
+left over from a completed cancellation.
+
+### 13. Unknown turns must not reuse stale agent_response
+
+LangGraph leaves state fields in place between turns. If `intent_agent` classified a turn
+as `unknown` with confidence exactly `0.5`, the old code did not set a new response because
+it only handled confidence below `0.5`. The router then ended the graph with the prior
+agent response still in state.
+
+`intent_agent` now sets the unknown fallback for any `CallIntent.UNKNOWN`, regardless of
+confidence. It also routes a negative answer after an "anything else?" prompt directly to
+farewell without an LLM call.
+
+### 14. Appointment dates are not DOBs
+
+The PII masker previously masked every ISO date as `[DOB]`, so agent logs/dashboard text
+showed appointment dates as `[DOB]`. This was privacy-safe but degraded operational
+readability. `mask_pii()` now masks dates only when they appear in DOB/birthday contexts
+such as "born on", "date of birth", or "DOB". Appointment dates in booking/cancellation
+confirmations remain visible in masked logs and dashboard displays.
+
+### 15. Caller phone is passed as a Twilio stream parameter
+
+Live calls showed `from=unknown` because the Twilio Media Stream `start` payload did not
+include the webhook's `From` field directly. `/incoming-call` now parses the Twilio POST
+body and injects the caller phone as a `<Parameter name="caller_phone" ...>` inside the
+`<Stream>`. `twilio_handler` reads `start.customParameters.caller_phone` before falling
+back to `start.from` or `unknown`.
+
+### 16. Active workflows override noisy intent classification
+
+Live testing showed the LLM classifier can misclassify short slot-filling utterances.
+In one reschedule flow, a time selection was classified as `booking`, so the new slot was
+booked without returning to `reschedule_agent` to cancel the old appointment. In a booking
+flow, a time-selection turn briefly classified as `reschedule`.
+
+`intent_agent` now checks the last agent prompt before calling the LLM. If the prompt is a
+transactional slot-filling prompt and booking/reschedule state is already in progress, it
+routes directly to the active workflow. Farewell, "anything else?" negation, and pending
+cancellation confirmation still take precedence.
+
+### 17. Latest live validation status
+
+After the active workflow routing fix, reschedule live validation succeeded. The final
+reschedule response explicitly stated that the previous appointment was cancelled and the
+new appointment was confirmed, which verifies that `reschedule_agent` regained control
+after booking the replacement slot.
+
+Operational status:
+- Booking works end to end.
+- Reschedule works end to end after the in-progress routing fix.
+- Cancellation confirmation works and prevents accidental destructive cancellation.
+- Escalation handoff response works.
+- Barge-in works with Twilio `clear` and buffered playback tracking.
+- Caller phone and appointment-date masking/logging are now correct.
+
+Final validation additions:
+- Streamlit dashboard masking and FAQ outcome display were validated.
+- Same-call latest-appointment targeting was validated for reschedule/cancel.
+- Inline date/time reservation was validated for booking/reschedule.
+
+### 18. FAQ demo mode and offered-slot parsing
+
+FAQ retrieval now has an explicit mode switch:
+- `FAQ_RETRIEVAL_MODE=markdown` (default): skip Chroma entirely and retrieve context from
+  the clinic markdown files. Use this for clean demos.
+- `FAQ_RETRIEVAL_MODE=chroma`: use the existing ChromaDB vector retrieval path. Chroma
+  exceptions still fall back to markdown context.
+
+Booking slot selection now runs deterministic parsing before the LLM slot extractor.
+It maps common spoken forms for offered slots, including `10`, `10 AM`, `ten`,
+`ten AM`, `ten o'clock`, and `the 10 o'clock one`. If the parsed time is not in the
+offered list or is ambiguous, booking falls back to the existing LLM extractor.
+
+Final validation additions:
+- Markdown FAQ mode is the default demo path.
+- ChromaDB remains optional and no longer blocks live FAQ calls.
