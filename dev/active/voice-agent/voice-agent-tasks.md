@@ -126,6 +126,21 @@
 > Current status is the final completion snapshot above. Older "remaining" or
 > "pending" notes below are historical and were superseded by later validation.
 
+### 2026-05-06 - README visual and technical positioning
+
+Updated the portfolio README for faster recruiter and hiring-manager scanning.
+
+**Changes:**
+- Added `docs/architecture.svg` as a small visual architecture diagram.
+- Embedded the diagram above the text architecture flow in `README.md`.
+- Added a "Why This Is Technically Interesting" section explaining that the project avoids hosted voice-agent platforms and implements the real-time media pipeline directly.
+- Trimmed the old long ASCII architecture block into a compact turn-loop summary plus supporting paths.
+- Updated active context and handoff notes to record the README positioning decision.
+
+**Validation:**
+- SVG XML parse check passed.
+- `git diff --check` passed.
+
 ### 2026-05-06 - Final README and archive cleanup
 
 Completed the final documentation and conservative cleanup pass.

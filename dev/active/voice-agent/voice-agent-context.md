@@ -1,6 +1,6 @@
 # Voice Agent — Context
 
-**Last Updated:** 2026-05-06 (final README/archive cleanup)
+**Last Updated:** 2026-05-06 (README scanability update)
 
 ## Final Completion Status
 
@@ -10,6 +10,7 @@
 - The maintained runtime is the modular `voice/` server.
 - Legacy Day 4 root scripts are archived under `dev/archive/legacy-day4-pipeline/` for learning/reference only.
 - No further live Twilio validation is required for the final cleanup pass.
+- README now includes a visual architecture diagram, a recruiter-facing "Why This Is Technically Interesting" section, and a shortened text architecture flow under the image.
 
 ## Architecture Decisions
 
@@ -31,6 +32,12 @@
 | Server | FastAPI + uvicorn | Async WebSocket support |
 | Tunnel | ngrok | Expose localhost to Twilio |
 | Dashboard | Streamlit | Quick to build, auto-refresh |
+
+## Portfolio Positioning Decisions
+
+- The README should make the raw media pipeline visible immediately. The technical story is that this is not a hosted voice-agent wrapper; it directly handles Twilio WebSocket media events, mulaw frames, STT, LangGraph routing, TTS, and playback.
+- The "Why This Is Technically Interesting" section should emphasize systems work recruiters can scan quickly: async queues, barge-in with VAD plus Twilio `mark`/`clear`, verification-gated agent state, same-call workflow memory, slot locking, PII masking, and dashboard observability.
+- Keep a short text architecture flow for precise text search and accessibility, but avoid a full duplicate ASCII diagram now that the SVG carries the visual scan.
 
 ## Prototype Lineage
 

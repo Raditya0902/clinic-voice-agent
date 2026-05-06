@@ -1,6 +1,6 @@
 # Codex Handoff - Voice Agent
 
-**Last Updated:** 2026-05-06 final README/archive cleanup
+**Last Updated:** 2026-05-06 README scanability update
 **Purpose:** Fast resume notes for Codex sessions. Root `AGENTS.md` remains the project instruction file.
 
 ## Current Snapshot
@@ -8,9 +8,10 @@
 - Project is complete, demo-ready, and portfolio-ready.
 - Final live validation is complete for booking, reschedule, cancellation with confirmation, FAQ, escalation, Streamlit dashboard masking/status display, and barge-in behavior.
 - Latest automated status: `pytest tests/ -v` -> 128 passed, 2 deprecation warnings.
-- `README.md` has been rewritten as the final architecture, setup, and demo overview.
+- `README.md` has been rewritten as the final architecture, setup, demo, visual diagram, and technical-interest overview.
+- The long ASCII architecture block has been trimmed to a compact text flow under the SVG diagram.
 - Legacy Day 4 prototype scripts have been archived under `dev/archive/legacy-day4-pipeline/`.
-- Current worktree contains uncommitted implementation/doc changes from the finishing work. Do not discard or revert changes you did not make.
+- Current uncommitted work is docs-only: README visual/technical-interest/scanability improvements plus related active dev note updates.
 
 ## Maintained Runtime
 
@@ -23,6 +24,13 @@
 - FAQ retrieval defaults to local markdown; ChromaDB remains available with `FAQ_RETRIEVAL_MODE=chroma`.
 - Streamlit + pandas dashboard.
 - pytest test suite.
+
+## README Positioning
+
+- Lead with the portfolio-ready status and visual architecture diagram.
+- Explicitly call out that the project avoids hosted voice-agent platforms and implements the real-time media pipeline directly.
+- Keep the recruiter-facing technical story focused on telephony, streaming audio, async orchestration, LangGraph state, slot locking, barge-in, PII masking, and dashboard visibility.
+- Keep the text architecture below the SVG short so it supports accessibility/search without forcing visual scanners through duplicate ASCII.
 
 ## Demo-Validated Behaviors
 

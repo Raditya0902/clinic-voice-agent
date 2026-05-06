@@ -14,40 +14,33 @@ The current project state is portfolio-ready: the five live scenarios have been 
 - Streams ElevenLabs Flash speech back to Twilio as direct `ulaw_8000` audio.
 - Displays masked call transcripts, outcomes, latency, sentiment, and escalation summaries in Streamlit.
 
+## Why This Is Technically Interesting
+
+This project deliberately avoids hosted voice-agent platforms like Vapi or LiveKit Agents. Instead, it implements the real-time media path directly: Twilio WebSocket events, mulaw audio frames, Deepgram streaming STT, LangGraph turn orchestration, ElevenLabs streaming TTS, and Twilio playback.
+
+That makes the repo more than a prompt wrapper. It includes the systems work that production voice agents depend on:
+
+- Real-time audio handling with Twilio Media Streams and direct `ulaw_8000` TTS output.
+- Async WebSocket orchestration with separate queues for inbound audio, finalized transcripts, agent turns, and outbound speech.
+- Barge-in using audio-level VAD plus Twilio `mark` and `clear` events to stop buffered playback.
+- Stateful multi-agent routing with verification gates, appointment workflow memory, and same-call reschedule/cancel targeting.
+- SQLite slot locking with a 60-second timeout so concurrent callers cannot double-book the same appointment.
+- PII masking across logs, stored transcripts, summaries, dashboard views, and optional escalation notifications.
+
+The goal was to show the full voice-agent stack: telephony, streaming audio, agent state, safety, scheduling reliability, and live operator visibility.
+
 ## Real-Time Architecture
 
-```text
-Caller
-  |
-  v
-Twilio PSTN
-  |
-  | Media Stream: mulaw 8 kHz
-  v
-FastAPI WebSocket /voice-stream
-  |
-  v
-CallSession
-  |
-  +--> Deepgram Nova-2 streaming STT
-  |
-  +--> LangGraph workflow
-  |      sentiment -> intent -> verification gate
-  |          -> booking
-  |          -> reschedule
-  |          -> cancellation
-  |          -> faq
-  |          -> escalation
-  |          -> farewell
-  |
-  +--> ElevenLabs Flash TTS, output_format=ulaw_8000
-  |
-  v
-Twilio playback to caller
+![Clinic Voice Agent architecture diagram](docs/architecture.svg)
 
-SQLite call history feeds the Streamlit dashboard.
-Markdown clinic knowledge feeds FAQ answers by default; ChromaDB retrieval is optional.
-```
+Core turn loop: `Caller -> Twilio Media Stream -> FastAPI WebSocket -> Deepgram STT -> LangGraph agents -> ElevenLabs ulaw TTS -> Twilio playback`.
+
+Supporting paths:
+
+- SQLite stores patients, slots, appointments, locks, call history, and dashboard metrics.
+- Markdown clinic knowledge grounds FAQ answers by default; ChromaDB retrieval is optional.
+- Guardrails mask PII, detect abuse/scope issues, and support safe escalation.
+- Streamlit reads masked call history for live operational visibility.
 
 ## Agent Workflow
 
