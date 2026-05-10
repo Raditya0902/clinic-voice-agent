@@ -27,5 +27,6 @@ Thumbs.db
 *.log
 logs/
 
-# Personal
-CLAUDE.MD
+# Project Context
+CLAUDE.md
+AGENTS.md
